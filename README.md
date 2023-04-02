@@ -1,3 +1,3 @@
 # BerryKV
 
-Implementation of disk storage kv database based on bitask
+Implementation of disk storage kv database based on Bitcask
