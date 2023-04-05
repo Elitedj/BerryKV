@@ -6,6 +6,10 @@ import (
 	"time"
 )
 
+const (
+	SpecialVal string = "SPECVAL"
+)
+
 var (
 	ErrKeyNotFound      = errors.New("error: key not found")
 	ErrDataFileNotFound = errors.New("error: data file not found")
@@ -48,6 +52,18 @@ func (b *Berry) Get(key string) (string, error) {
 	return b.get(meta)
 }
 
+func (b *Berry) Del(key string) error {
+	b.Lock()
+	defer b.Unlock()
+
+	_, ok := b.keydir[key]
+	if !ok {
+		return nil
+	}
+
+	return b.del(key)
+}
+
 func (b *Berry) set(key string, val []byte) error {
 	e := NewEntry(key, val)
 	data := e.Encode()
@@ -84,4 +100,18 @@ func (b *Berry) get(m Meta) (string, error) {
 	}
 
 	return df.Read(m.EntryOffset, m.EntrySize)
+}
+
+func (b *Berry) del(key string) error {
+	e := NewEntry(key, []byte(SpecialVal))
+	data := e.Encode()
+
+	_, err := b.active.Write(data)
+	if err != nil {
+		return err
+	}
+
+	delete(b.keydir, key)
+
+	return nil
 }

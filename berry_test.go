@@ -32,3 +32,19 @@ func TestSetAndGet(t *testing.T) {
 	val, err = db.Get("NoThisKey")
 	assert.Equal(t, berry.ErrKeyNotFound, err)
 }
+
+func TestDel(t *testing.T) {
+	db, err := berry.New()
+	assert.NoError(t, err)
+
+	err = db.Set("Hello", "World")
+	assert.NoError(t, err)
+	val, err := db.Get("Hello")
+	assert.NoError(t, err)
+	assert.Equal(t, "World", val)
+
+	err = db.Del("Hello")
+	assert.NoError(t, err)
+	val, err = db.Get("Hello")
+	assert.Equal(t, berry.ErrKeyNotFound, err)
+}
