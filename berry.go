@@ -2,12 +2,17 @@ package berry
 
 import (
 	"errors"
+	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 )
 
 const (
 	SpecialVal string = "SPECVAL"
+	DataDir    string = "./data"
 )
 
 var (
@@ -23,8 +28,7 @@ type Berry struct {
 }
 
 func New() (*Berry, error) {
-	dir := "./data"
-	activeDF, _ := NewDataFile(dir, 1)
+	activeDF, _ := NewDataFile(DataDir, 1)
 	b := &Berry{
 		active: activeDF,
 		olders: make(map[int32]*DataFile),
@@ -37,7 +41,7 @@ func (b *Berry) Set(key, val string) error {
 	b.Lock()
 	defer b.Unlock()
 
-	return b.set(key, []byte(val))
+	return b.set(b.active, key, []byte(val))
 }
 
 func (b *Berry) Get(key string) (string, error) {
@@ -64,17 +68,17 @@ func (b *Berry) Del(key string) error {
 	return b.del(key)
 }
 
-func (b *Berry) set(key string, val []byte) error {
+func (b *Berry) set(df *DataFile, key string, val []byte) error {
 	e := NewEntry(key, val)
 	data := e.Encode()
 
-	offset, err := b.active.Write(data)
+	offset, err := df.Write(data)
 	if err != nil {
 		return err
 	}
 
 	b.keydir[key] = Meta{
-		FileID:      int32(b.active.ID()),
+		FileID:      int32(df.ID()),
 		EntrySize:   int32(len(data)),
 		EntryOffset: offset,
 		Timestamp:   int32(time.Now().Unix()),
@@ -112,6 +116,71 @@ func (b *Berry) del(key string) error {
 	}
 
 	delete(b.keydir, key)
+
+	return nil
+}
+
+func (b *Berry) Merge(d time.Duration) {
+	ticker := time.NewTicker(d).C
+
+	for range ticker {
+		b.Lock()
+		b.merge()
+		b.Unlock()
+	}
+}
+
+func (b *Berry) merge() error {
+	// make a temp datafile
+	tmpDir, err := os.MkdirTemp("", "merge")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(tmpDir)
+
+	mdf, err := NewDataFile(tmpDir, 0)
+	if err != nil {
+		return err
+	}
+
+	// rewrite k-v into temp datafile
+	for k := range b.keydir {
+		v, _ := b.get(b.keydir[k])
+		b.set(mdf, k, []byte(v))
+	}
+
+	// close active
+	b.active.Close()
+
+	// close all olders
+	for _, df := range b.olders {
+		df.Close()
+	}
+
+	b.olders = make(map[int32]*DataFile)
+
+	// remove all datafile
+	filepath.Walk(DataDir, func(path string, info fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		if filepath.Ext(path) == ".db" {
+			err := os.Remove(path)
+			if err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	// replace active datafile
+	os.Rename(filepath.Join(tmpDir, fmt.Sprintf(activeDataFile, 0)),
+		filepath.Join(DataDir, fmt.Sprintf(activeDataFile, 0)))
+
+	b.active = mdf
 
 	return nil
 }

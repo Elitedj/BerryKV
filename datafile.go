@@ -9,6 +9,7 @@ import (
 
 const (
 	activeDataFile = "berry_%d.db"
+	oldersDataFile = "olders_%d.db"
 )
 
 type DataFile struct {
@@ -68,4 +69,12 @@ func (df *DataFile) Read(offset, size int32) (string, error) {
 	}
 
 	return string(e.Value), nil
+}
+
+func (df *DataFile) Close() error {
+	err := df.fd.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
