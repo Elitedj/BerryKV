@@ -1,14 +1,20 @@
 package berry
 
 import (
+	"errors"
 	"sync"
 	"time"
+)
+
+var (
+	ErrKeyNotFound      = errors.New("error: key not found")
+	ErrDataFileNotFound = errors.New("error: data file not found")
 )
 
 type Berry struct {
 	sync.Mutex
 	active *DataFile
-	olders map[int]*DataFile
+	olders map[int32]*DataFile
 	keydir KeyDir
 }
 
@@ -17,7 +23,7 @@ func New() (*Berry, error) {
 	activeDF, _ := NewDataFile(dir, 1)
 	b := &Berry{
 		active: activeDF,
-		olders: make(map[int]*DataFile),
+		olders: make(map[int32]*DataFile),
 		keydir: make(KeyDir),
 	}
 	return b, nil
@@ -30,8 +36,16 @@ func (b *Berry) Set(key, val string) error {
 	return b.set(key, []byte(val))
 }
 
-func (b *Berry) Get(key string) error {
-	return nil
+func (b *Berry) Get(key string) (string, error) {
+	b.Lock()
+	defer b.Unlock()
+
+	meta, ok := b.keydir[key]
+	if !ok {
+		return "", ErrKeyNotFound
+	}
+
+	return b.get(meta)
 }
 
 func (b *Berry) set(key string, val []byte) error {
@@ -50,4 +64,24 @@ func (b *Berry) set(key string, val []byte) error {
 		Timestamp:   int32(time.Now().Unix()),
 	}
 	return nil
+}
+
+func (b *Berry) get(m Meta) (string, error) {
+	fid := m.FileID
+	var df *DataFile
+
+	if fid == b.active.ID() {
+		df = b.active
+	} else {
+		_, ok := b.olders[fid]
+		if !ok {
+			df = b.olders[fid]
+		}
+	}
+
+	if df == nil {
+		return "", ErrDataFileNotFound
+	}
+
+	return df.Read(m.EntryOffset, m.EntrySize)
 }

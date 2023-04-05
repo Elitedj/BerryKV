@@ -2,6 +2,7 @@ package berry
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 )
@@ -18,7 +19,7 @@ type DataFile struct {
 
 func NewDataFile(dir string, id int32) (*DataFile, error) {
 	path := filepath.Join(dir, fmt.Sprintf(activeDataFile, id))
-	fd, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	fd, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open file %s error: %s", path, err.Error())
 	}
@@ -50,4 +51,21 @@ func (df *DataFile) Write(data []byte) (int32, error) {
 	df.offset += int32(len(data))
 
 	return offset, nil
+}
+
+func (df *DataFile) Read(offset, size int32) (string, error) {
+	buf := make([]byte, size)
+
+	_, err := df.fd.ReadAt(buf, int64(offset))
+	if err != nil && err != io.EOF {
+		return "", err
+	}
+
+	e := &Entry{}
+	err = e.Decode(buf)
+	if err != nil {
+		return "", err
+	}
+
+	return string(e.Value), nil
 }

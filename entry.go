@@ -2,12 +2,18 @@ package berry
 
 import (
 	"encoding/binary"
+	"errors"
 	"hash/crc32"
 	"time"
 )
 
 const (
 	headerSize = 16
+)
+
+var (
+	ErrEntryIllegal = errors.New("error: entry illegal")
+	ErrCrcFail      = errors.New("error: crc fail")
 )
 
 type Entry struct {
@@ -46,4 +52,29 @@ func (e *Entry) Encode() []byte {
 	copy(buf[headerSize:headerSize+e.KeySize], []byte(e.Key))
 	copy(buf[headerSize+e.KeySize:], e.Value)
 	return buf
+}
+
+func (e *Entry) Decode(buf []byte) error {
+	n := len(buf)
+	if n < headerSize {
+		return ErrEntryIllegal
+	}
+
+	e.CheckSum = binary.LittleEndian.Uint32(buf[0:4])
+	e.Timestamp = binary.LittleEndian.Uint32(buf[4:8])
+	e.KeySize = binary.LittleEndian.Uint32(buf[8:12])
+	e.ValSize = binary.LittleEndian.Uint32(buf[12:16])
+
+	if n != int(headerSize+e.KeySize+e.ValSize) {
+		return ErrEntryIllegal
+	}
+
+	e.Key = string(buf[headerSize : headerSize+e.KeySize])
+	e.Value = make([]byte, e.ValSize)
+	copy(e.Value, buf[headerSize+e.KeySize:])
+	crc := crc32.ChecksumIEEE(e.Value)
+	if crc != e.CheckSum {
+		return ErrCrcFail
+	}
+	return nil
 }
