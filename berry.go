@@ -11,8 +11,9 @@ import (
 )
 
 const (
-	SpecialVal string = "SPECVAL"
-	DataDir    string = "./data"
+	SpecialVal      string = "SPECVAL"
+	DataDir         string = "./data"
+	MaxDataFileSize int64  = int64(200 * (1 << 20))
 )
 
 var (
@@ -178,8 +179,8 @@ func (b *Berry) merge() error {
 	})
 
 	// replace active datafile
-	os.Rename(filepath.Join(tmpDir, fmt.Sprintf(activeDataFile, 0)),
-		filepath.Join(DataDir, fmt.Sprintf(activeDataFile, 0)))
+	os.Rename(filepath.Join(tmpDir, fmt.Sprintf(DataFileNameFormat, 0)),
+		filepath.Join(DataDir, fmt.Sprintf(DataFileNameFormat, 0)))
 
 	b.active = mdf
 
@@ -192,6 +193,41 @@ func (b *Berry) makeHintFile() error {
 	if err != nil {
 		return err
 	}
+
+	return nil
+}
+
+func (b *Berry) CheckActiveFileSize(d time.Duration) {
+	ticker := time.NewTicker(d).C
+
+	for range ticker {
+		b.checkActiveFileSize()
+	}
+}
+
+func (b *Berry) checkActiveFileSize() error {
+	b.Lock()
+	defer b.Unlock()
+
+	stat, err := b.active.fd.Stat()
+	if err != nil {
+		return err
+	}
+
+	size := stat.Size()
+	if size < MaxDataFileSize {
+		return nil
+	}
+
+	id := b.active.ID()
+	b.olders[id] = b.active
+
+	df, err := NewDataFile(DataDir, id+1)
+	if err != nil {
+		return err
+	}
+
+	b.active = df
 
 	return nil
 }

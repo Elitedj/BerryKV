@@ -1,6 +1,9 @@
 package berry_test
 
 import (
+	"io/ioutil"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -8,7 +11,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+func CleanDataFile() {
+	files, _ := ioutil.ReadDir(berry.DataDir)
+	for _, file := range files {
+		os.RemoveAll(filepath.Join(berry.DataDir, file.Name()))
+	}
+}
+
 func TestSetAndGet(t *testing.T) {
+	CleanDataFile()
 	db, err := berry.New()
 	assert.NoError(t, err)
 
@@ -35,6 +46,7 @@ func TestSetAndGet(t *testing.T) {
 }
 
 func TestDel(t *testing.T) {
+	CleanDataFile()
 	db, err := berry.New()
 	assert.NoError(t, err)
 
@@ -51,6 +63,7 @@ func TestDel(t *testing.T) {
 }
 
 func TestMerge(t *testing.T) {
+	CleanDataFile()
 	db, err := berry.New()
 	assert.NoError(t, err)
 
@@ -63,6 +76,22 @@ func TestMerge(t *testing.T) {
 	go db.Merge(5 * time.Second)
 	time.Sleep(7 * time.Second)
 	val, err = db.Get("Hello")
+	assert.NoError(t, err)
+	assert.Equal(t, "World", val)
+}
+
+func TestCheckActiveFileSize(t *testing.T) {
+	CleanDataFile()
+	db, err := berry.New()
+	assert.NoError(t, err)
+
+	go db.CheckActiveFileSize(time.Second)
+
+	for i := 1; i <= 9000000; i++ {
+		db.Set("Hello", "World")
+	}
+
+	val, err := db.Get("Hello")
 	assert.NoError(t, err)
 	assert.Equal(t, "World", val)
 }

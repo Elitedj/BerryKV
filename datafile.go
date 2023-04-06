@@ -8,8 +8,7 @@ import (
 )
 
 const (
-	activeDataFile = "berry_%d.db"
-	oldersDataFile = "olders_%d.db"
+	DataFileNameFormat = "berry_%d.db"
 )
 
 type DataFile struct {
@@ -19,7 +18,7 @@ type DataFile struct {
 }
 
 func NewDataFile(dir string, id int32) (*DataFile, error) {
-	path := filepath.Join(dir, fmt.Sprintf(activeDataFile, id))
+	path := filepath.Join(dir, fmt.Sprintf(DataFileNameFormat, id))
 	fd, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_RDWR, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("open file %s error: %s", path, err.Error())
