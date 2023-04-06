@@ -6,14 +6,19 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 )
 
 const (
-	SpecialVal      string = "SPECVAL"
-	DataDir         string = "./data"
-	MaxDataFileSize int64  = int64(200 * (1 << 20))
+	SpecialVal                   string        = "SPECVAL"
+	DataDir                      string        = "./data"
+	HintFile                     string        = "berry.hint"
+	MaxDataFileSize              int64         = int64(200 * (1 << 20))
+	defaultMergeInterval         time.Duration = time.Hour
+	defaultCheckFileSizeInterval time.Duration = time.Minute * 5
 )
 
 var (
@@ -29,13 +34,93 @@ type Berry struct {
 }
 
 func New() (*Berry, error) {
-	activeDF, _ := NewDataFile(DataDir, 1)
+	var maxID int32 = 0
+	olders := make(map[int32]*DataFile)
+
+	// get all datafiles
+	files, err := filepath.Glob(fmt.Sprintf("%s/*.db", DataDir))
+	if err != nil {
+		return nil, err
+	}
+
+	for _, file := range files {
+		filename := filepath.Base(file)
+		id, err := strconv.ParseInt(strings.TrimPrefix(strings.TrimSuffix(filename, ".db"), "berry_"), 10, 32)
+		if err != nil {
+			return nil, err
+		}
+
+		fd, err := os.Open(file)
+		if err != nil {
+			return nil, err
+		}
+
+		stat, err := fd.Stat()
+		if err != nil {
+			return nil, err
+		}
+
+		df := &DataFile{
+			id:     int32(id),
+			fd:     fd,
+			offset: int32(stat.Size()),
+		}
+
+		olders[int32(id)] = df
+
+		if int32(id) > maxID {
+			maxID = int32(id)
+		}
+	}
+
+	activeDF, err := NewDataFile(DataDir, maxID+1)
+	if err != nil {
+		return nil, err
+	}
+
+	keydir := make(KeyDir)
+
+	// check if a hint file already
+	hintFile := filepath.Join(DataDir, HintFile)
+	_, err = os.Stat(hintFile)
+	if err == nil {
+		keydir.Decode(hintFile)
+	}
+
 	b := &Berry{
 		active: activeDF,
-		olders: make(map[int32]*DataFile),
-		keydir: make(KeyDir),
+		olders: olders,
+		keydir: keydir,
 	}
+
+	go b.CheckActiveFileSize(defaultCheckFileSizeInterval)
+
+	go b.Merge(defaultMergeInterval)
+
 	return b, nil
+}
+
+func (b *Berry) Close() error {
+	b.Lock()
+	defer b.Unlock()
+
+	err := b.makeHintFile()
+	if err != nil {
+		return err
+	}
+
+	err = b.active.Close()
+	if err != nil {
+		return err
+	}
+
+	for _, df := range b.olders {
+		if err := df.Close(); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (b *Berry) Set(key, val string) error {
@@ -188,7 +273,7 @@ func (b *Berry) merge() error {
 }
 
 func (b *Berry) makeHintFile() error {
-	path := filepath.Join(DataDir, "berry.hint")
+	path := filepath.Join(DataDir, HintFile)
 	err := b.keydir.Encode(path)
 	if err != nil {
 		return err

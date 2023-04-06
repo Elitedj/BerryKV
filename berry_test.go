@@ -43,6 +43,8 @@ func TestSetAndGet(t *testing.T) {
 
 	val, err = db.Get("NoThisKey")
 	assert.Equal(t, berry.ErrKeyNotFound, err)
+
+	db.Close()
 }
 
 func TestDel(t *testing.T) {
@@ -60,6 +62,8 @@ func TestDel(t *testing.T) {
 	assert.NoError(t, err)
 	val, err = db.Get("Hello")
 	assert.Equal(t, berry.ErrKeyNotFound, err)
+
+	db.Close()
 }
 
 func TestMerge(t *testing.T) {
@@ -67,17 +71,26 @@ func TestMerge(t *testing.T) {
 	db, err := berry.New()
 	assert.NoError(t, err)
 
+	go db.CheckActiveFileSize(time.Second)
+
 	err = db.Set("Hello", "World")
 	assert.NoError(t, err)
 	val, err := db.Get("Hello")
 	assert.NoError(t, err)
 	assert.Equal(t, "World", val)
 
+	for i := 1; i <= 9000000; i++ {
+		db.Set("Hello", "World")
+	}
+
 	go db.Merge(5 * time.Second)
+
 	time.Sleep(7 * time.Second)
 	val, err = db.Get("Hello")
 	assert.NoError(t, err)
 	assert.Equal(t, "World", val)
+
+	db.Close()
 }
 
 func TestCheckActiveFileSize(t *testing.T) {
@@ -94,4 +107,6 @@ func TestCheckActiveFileSize(t *testing.T) {
 	val, err := db.Get("Hello")
 	assert.NoError(t, err)
 	assert.Equal(t, "World", val)
+
+	db.Close()
 }
