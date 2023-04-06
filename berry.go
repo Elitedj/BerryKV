@@ -126,6 +126,7 @@ func (b *Berry) Merge(d time.Duration) {
 	for range ticker {
 		b.Lock()
 		b.merge()
+		b.makeHintFile()
 		b.Unlock()
 	}
 }
@@ -181,6 +182,16 @@ func (b *Berry) merge() error {
 		filepath.Join(DataDir, fmt.Sprintf(activeDataFile, 0)))
 
 	b.active = mdf
+
+	return nil
+}
+
+func (b *Berry) makeHintFile() error {
+	path := filepath.Join(DataDir, "berry.hint")
+	err := b.keydir.Encode(path)
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
