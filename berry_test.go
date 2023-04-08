@@ -100,6 +100,7 @@ func TestCheckActiveFileSize(t *testing.T) {
 
 	go db.CheckActiveFileSize(time.Second)
 
+	db.Set("Hello1", "World1")
 	for i := 1; i <= 9000000; i++ {
 		db.Set("Hello", "World")
 	}
@@ -107,6 +108,10 @@ func TestCheckActiveFileSize(t *testing.T) {
 	val, err := db.Get("Hello")
 	assert.NoError(t, err)
 	assert.Equal(t, "World", val)
+
+	val, err = db.Get("Hello1")
+	assert.NoError(t, err)
+	assert.Equal(t, "World1", val)
 
 	db.Close()
 }

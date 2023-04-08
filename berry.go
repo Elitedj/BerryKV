@@ -180,7 +180,7 @@ func (b *Berry) get(m Meta) (string, error) {
 		df = b.active
 	} else {
 		_, ok := b.olders[fid]
-		if !ok {
+		if ok {
 			df = b.olders[fid]
 		}
 	}
